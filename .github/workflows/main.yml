@@ -9,8 +9,31 @@ on:
     branches: [ main ]
 
 jobs:
+  docker:
+    name: Build proxy container image
+    runs-on: ubuntu-latest
+    container: docker:19.03.5
+
+    services:
+      docker:
+        image: docker:19.03.5-dind
+
+    steps:
+    - name: Build
+      uses: actions/checkout@v2
+      run: |
+        mkdir data/
+        docker build --compress -t proxy .
+        docker save --output data/image.tar proxy
+    - name: artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: image
+        path: data/
+
+        
   ecr:
-    name: build and deploy image to AWS ECR
+    name: Deploy image to AWS ECR
     runs-on: ubuntu-latest
     environment: dev
 
@@ -39,6 +62,9 @@ jobs:
         # Build a docker container and
         # push it to ECR so that it can
         # be deployed to ECS.
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+        apk add python3
+        pip3 install awscli==1.18.8
+        docker load --input data/image.tar
+        docker tag proxy:latest $ECR_REPO:dev
+        docker push $ECR_REPO:dev
+        echo "::set-output name=image::$ECR_REPO:dev"
